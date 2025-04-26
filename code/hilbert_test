@@ -1,0 +1,38 @@
+import numpy as np
+from tensorflow import keras
+from tensorflow.keras.preprocessing import image
+import matplotlib.pyplot as plt
+
+# Load the saved model
+# Change the model file path string to a raw string to avoid escape character issues
+model = keras.models.load_model(r"D:\final year project\dysarthric_classifier_hilbert_model.h5")
+
+# Reconfigure standard output to ensure UTF-8 encoding during prediction and print operations
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
+
+# Path to the image to be tested
+test_image_path = "D:/final year project\hilbert_testing/0005_hilbert_spectrum.png"
+
+# Load and preprocess the image
+img = image.load_img(test_image_path, target_size=(128, 128))
+img_array = image.img_to_array(img) / 255.0
+img_array = np.expand_dims(img_array, axis=0)
+
+# Predict the class and get the probability score
+prediction = model.predict(img_array)
+probability = prediction[0][0]
+predicted_class = np.round(probability).astype(int)
+
+# Output the probability score and classification result
+print("Prediction probability score:", probability)
+if predicted_class == 0:
+    print("The image is classified as dysarthric.")
+else:
+    print("The image is classified as non-dysarthric.")
+
+# Optionally, display the test image
+plt.imshow(img)
+plt.title("Test Image")
+plt.axis("off")
+plt.show()

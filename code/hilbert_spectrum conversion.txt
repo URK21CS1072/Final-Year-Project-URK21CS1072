@@ -1,0 +1,142 @@
+% Load the Signal package for the hilbert function
+pkg load signal;
+
+% Define the input directories containing the audio files
+input_dirs = {'D:\datasets\TORGO male without dysarthria', ...
+              'D:\datasets\TORGO female without dysarthria'};
+
+% Define the output directory for Hilbert spectra
+output_dir = 'D:\datasets\Hilbert_spectrum\non_dysarthric';
+
+% Create the output directory if it doesn't exist
+if ~exist(output_dir, 'dir')
+    mkdir(output_dir);
+end
+
+% Function to generate and save Hilbert spectrum
+function save_hilbert_spectrum(audio_path, output_path)
+    try
+        % Load the audio signal
+        [audio_signal, sample_rate] = audioread(audio_path);
+    catch
+        fprintf('Error reading file: %s. Skipping...\n', audio_path);
+        return;
+    end
+
+    % Normalize the audio signal
+    audio_signal = audio_signal / max(abs(audio_signal));
+
+    % Compute the analytic signal using the Hilbert transform
+    analytic_signal = hilbert(audio_signal);
+
+    % Calculate instantaneous amplitude and phase
+    inst_amplitude = abs(analytic_signal);
+    inst_phase = angle(analytic_signal);
+
+    % Unwrap the phase to prevent discontinuities
+    unwrapped_phase = unwrap(inst_phase);
+
+    % Calculate instantaneous frequency
+    inst_frequency = [0; diff(unwrapped_phase) * sample_rate / (2 * pi)];
+
+    % Time vector for plotting
+    time = (0:length(audio_signal)-1) / sample_rate;
+
+    % Create a figure without displaying it
+    h = figure('visible', 'off');
+
+    % Plot the Hilbert spectrum
+    scatter(time, inst_frequency, 1, inst_amplitude, 'filled');
+    axis off; % Turn off the axis
+    colormap(jet);
+
+    % Save the figure
+    print(h, output_path, '-dpng', '-r300');
+
+    % Close the figure
+    close(h);
+end
+
+% Recursive function to process directories
+function process_directory(current_dir, base_input_dir, output_dir, wait_handle, total_files, file_counter)
+    % Get list of all items in the current directory
+    items = dir(current_dir);
+
+    % Loop through each item
+    for i = 1:length(items)
+        item_name = items(i).name;
+
+        % Skip '.' and '..' directories
+        if strcmp(item_name, '.') || strcmp(item_name, '..')
+            continue;
+        end
+
+        % Construct full path of the item
+        item_path = fullfile(current_dir, item_name);
+
+        % Check if the item is a directory
+        if items(i).isdir
+            % Recursively process the subdirectory
+            process_directory(item_path, base_input_dir, output_dir, wait_handle, total_files, file_counter);
+        else
+            % Check if the item is a .wav file
+            [~, ~, ext] = fileparts(item_name);
+            if strcmpi(ext, '.wav')
+                % Generate a unique output path
+                relative_path = strrep(item_path, base_input_dir, '');
+                unique_filename = strrep(relative_path, filesep, '_');
+                [~, name, ~] = fileparts(unique_filename);
+                output_path = fullfile(output_dir, [name, '_hilbert_spectrum.png']);
+
+                % Process the .wav file
+                save_hilbert_spectrum(item_path, output_path);
+                fprintf('Processed and saved: %s\n', output_path);
+
+                % Update progress bar
+                file_counter.value = file_counter.value + 1;
+                waitbar(file_counter.value / total_files, wait_handle, ...
+                        sprintf('Processing file %d of %d', file_counter.value, total_files));
+            end
+        end
+    end
+end
+
+% Function to count total number of .wav files
+function total = count_wav_files(directory)
+    items = dir(directory);
+    total = 0;
+    for i = 1:length(items)
+        if strcmp(items(i).name, '.') || strcmp(items(i).name, '..')
+            continue;
+        end
+        item_path = fullfile(directory, items(i).name);
+        if items(i).isdir
+            total = total + count_wav_files(item_path);
+        else
+            [~, ~, ext] = fileparts(items(i).name);
+            if strcmpi(ext, '.wav')
+                total = total + 1;
+            end
+        end
+    end
+end
+
+% Main script execution
+total_files = 0;
+for k = 1:length(input_dirs)
+    total_files = total_files + count_wav_files(input_dirs{k});
+end
+file_counter = struct('value', 0);
+
+% Initialize progress bar
+wait_handle = waitbar(0, 'Processing files...');
+
+% Start processing from each input directory
+for k = 1:length(input_dirs)
+    process_directory(input_dirs{k}, input_dirs{k}, output_dir, wait_handle, total_files, file_counter);
+end
+
+% Close progress bar
+close(wait_handle);
+
+fprintf('Hilbert spectrum generation completed for all audio files.\n');
